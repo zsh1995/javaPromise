@@ -16,6 +16,8 @@ public class Timer {
 
     DelayQueue<DelayedTask<?>> delayTasks;
 
+    int threadNum;
+
     static class DelayedTask<T> implements Delayed {
         private Consumer<T> delayedConsumer;
 
@@ -55,7 +57,7 @@ public class Timer {
     }
 
     public static Timer singleThreadTimer() {
-        return new Timer(2);
+        return new Timer(1);
     }
 
     public void shutdownGraceful() {
@@ -74,13 +76,14 @@ public class Timer {
            while(runFlag && !Thread.interrupted()) {
                try {
                    DelayedTask<?> task = delayTasks.poll(10, TimeUnit.MILLISECONDS);
-
                    if(task != null) {
-//                       System.out.println("offer 1");
-                       pool.submit(()->{
+                       if( threadNum == 1) {
                            task.invoke();
-                       });
-
+                       } else {
+                           pool.submit(()->{
+                               task.invoke();
+                           });
+                       }
                    }
                } catch (InterruptedException e) {
                    runFlag = false;
@@ -90,10 +93,10 @@ public class Timer {
         });
     }
 
-    private Timer(int threadNums) {
-        pool = Executors.newFixedThreadPool(2);
-
+    private Timer(int threadNum) {
+        pool = Executors.newFixedThreadPool(threadNum);
         delayTasks = new DelayQueue<>();
+        this.threadNum = threadNum;
         start();
     }
 
