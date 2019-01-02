@@ -16,7 +16,6 @@ public class Promise <T> {
         pending, fulfilled, rejected
     }
 
-
     private Status status = Status.pending;
 
     private Consumer<T> resolve;
@@ -32,7 +31,9 @@ public class Promise <T> {
     private void finished(T val) {
         pval = val;
         status = Status.fulfilled;
-        if(handler != null) handler.accept(pval);
+        if(handler != null) {
+            handler.accept(pval);
+        }
     }
 
     private void fail() {
@@ -62,7 +63,7 @@ public class Promise <T> {
     }
     private Consumer<T> handler;
     private void setHanlder(Consumer<T> handler) {
-        if(handler == null && this.status == Status.pending)
+        if(this.handler == null && this.status == Status.pending)
             this.handler = handler;
         else if(this.status == Status.fulfilled){
             handler.accept(pval);
@@ -76,9 +77,9 @@ public class Promise <T> {
             if(status == Status.fulfilled) {
                 Promise<R> res = onFulfilled.asycdo(pval);
                 if(res == null) {
-                    Promise.<R>resolve(null);
+                    Promise.<R>resolve(null).setHanlder(result.resolve);
                 } else {
-                    // make the inner promise link with outter promise
+                    // make the inner promise linked with outter promise
                     res.setHanlder(result.resolve);
 
                 }
@@ -95,16 +96,24 @@ public class Promise <T> {
     }
 
     public static void main(String[] args) {
-        Promise<?> p1 = new Promise<>((res, rej)-> {
-            System.out.println("phase 1");
-            res.accept(1);
-        }).then((val) -> {
-            System.out.println("phase 2, preval = " + val);
-            return Promise.resolve("hello");
-        }).then((val) -> {
-            System.out.println("phase 3, preval = " + val);
+//        Promise<?> p1 = new Promise<>((res, rej)-> {
+//            System.out.println("phase 1");
+//            res.accept(1);
+//        }).then((val) -> {
+//            System.out.println("phase 2, preval = " + val);
+//            return Promise.resolve("hello");
+//        }).then((val) -> {
+//            System.out.println("phase 3, preval = " + val);
+//            return null;
+//        });
+        Promise<?> p1 = new Promise<>((res, rej) -> {
+           System.out.println(1);
+           res.accept(1);
+        }).then((val)-> {
+            System.out.println("phase 2 , val = " + val);
             return null;
         });
+
     }
 
 }

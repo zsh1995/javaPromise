@@ -112,10 +112,13 @@ public class Timer {
             timer.setTimeout((val)-> {
                 System.out.println(val);
                 res.accept(100);
-            }, 100, 1000);
+            }, 10, 1000);
         }).then((val) -> {
-            System.out.println(2);
-            return null;
+            return new Promise<Integer>((res, reject)-> {
+                timer.setTimeout((ival) -> {
+                    System.out.println(ival);
+                }, val, 1000);
+            });
         });
         //timer.shutdownGraceful();
     }
