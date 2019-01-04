@@ -1,7 +1,13 @@
 package com.mrzsh;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
+
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -15,6 +21,13 @@ public class Timer {
     ExecutorService pool;
 
     DelayQueue<DelayedTask<?>> delayTasks;
+
+    private AtomicLong along = new AtomicLong(1000);
+
+    private Map<Long, DelayedTask<?>> timingMap = Collections.synchronizedMap(new HashMap<>());
+
+    private Map<Long, Boolean> intervalMap = Collections.synchronizedMap(new HashMap<>());
+
 
     int threadNum;
 
@@ -100,12 +113,41 @@ public class Timer {
         start();
     }
 
-    public <T> int setTimeout(Consumer<T> func, T arg, int milliseconds) {
+    public <T> long setTimeout(Consumer<T> func, T arg, int milliseconds) {
         try {
-            return delayTasks.offer(new DelayedTask<T>(func, arg, milliseconds)) ? 1 : 0;
+            DelayedTask<?> task = new DelayedTask<>(func, arg, milliseconds);
+            task.delayedConsumer.andThen((val)-> timingMap.remove(task));
+            while(timingMap.containsKey(along.incrementAndGet())) {
+            }
+            timingMap.put(along.get(), task);
+            delayTasks.offer(task);
+            return along.get();
         } finally {
 //            System.out.println(delayTasks.size());
         }
+    }
+
+    public <T> int setInterval(Consumer<T> func, T arg, int milliseconds) {
+        call(func, arg, milliseconds);
+        return 0;
+    }
+
+    public boolean clearTimeout(long id) {
+        if(!timingMap.containsKey(id)) return false;
+        DelayedTask<?> task = timingMap.get(id);
+        return delayTasks.remove(task);
+    }
+
+    public boolean clearInterval(long id) {
+        return false;
+    }
+
+    private <T> void call(Consumer<T> func, T arg, int milliseconds) {
+
+        func.accept(arg);
+        setTimeout( (args)-> {
+            call(func, arg, milliseconds);
+        }, null, milliseconds);
     }
 
     public static void main(String[] args) {
@@ -116,13 +158,24 @@ public class Timer {
                 System.out.println(val);
                 res.accept(100);
             }, 10, 1000);
-        }).then((val) -> {
-            return new Promise<Integer>((res, reject)-> {
-                timer.setTimeout((ival) -> {
-                    System.out.println(ival);
-                }, val, 1000);
-            });
+        }).then((val) ->
+                new Promise<Integer>((res, reject)-> {
+                    timer.setTimeout((ival) -> {
+                        System.out.println(ival);
+                        res.accept(101);
+                    }, val, 1000);
+                })
+        ).then((ival)->{
+            System.out.println(ival);
+            timer.setInterval((val)->{
+                System.out.println(val+1);
+            }, 10, 1000);
+            return null;
         });
+        long id = timer.setTimeout((val)-> {
+            System.out.println(100000);
+        }, 1000, 10000);
+        timer.clearTimeout(id);
         //timer.shutdownGraceful();
     }
 
