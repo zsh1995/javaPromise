@@ -1,10 +1,7 @@
 package com.mrzsh;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
-
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,6 +21,8 @@ public class Timer {
 
     private AtomicLong along = new AtomicLong(1000);
 
+    private AtomicLong intervalId = new AtomicLong(1000);
+
     private Map<Long, DelayedTask<?>> timingMap = Collections.synchronizedMap(new HashMap<>());
 
     private Map<Long, Boolean> intervalMap = Collections.synchronizedMap(new HashMap<>());
@@ -36,6 +35,8 @@ public class Timer {
 
         private T arg;
 
+        private  boolean isCanceled = false;
+
         long targetTime;
 
         public DelayedTask(Consumer<T> consumer, T arg, int ms) {
@@ -46,7 +47,11 @@ public class Timer {
 
         public void invoke() {
 //            System.out.println("invoke");
-            delayedConsumer.accept(arg);
+            if(!isCanceled) delayedConsumer.accept(arg);
+        }
+
+        public void cancel() {
+            this.isCanceled = true;
         }
 
         @Override
@@ -127,26 +132,33 @@ public class Timer {
         }
     }
 
-    public <T> int setInterval(Consumer<T> func, T arg, int milliseconds) {
-        call(func, arg, milliseconds);
-        return 0;
+    public <T> long setInterval(Consumer<T> func, T arg, int milliseconds) {
+        while(intervalMap.containsKey(intervalId.incrementAndGet())) {
+        }
+        intervalMap.put(intervalId.get(), true);
+        callIntervalTask(intervalId.get(), func, arg, milliseconds);
+        return intervalId.get();
     }
 
     public boolean clearTimeout(long id) {
         if(!timingMap.containsKey(id)) return false;
         DelayedTask<?> task = timingMap.get(id);
-        return delayTasks.remove(task);
+        task.cancel();
+        return true;
     }
 
     public boolean clearInterval(long id) {
+        intervalMap.put(id, false);
         return false;
     }
 
-    private <T> void call(Consumer<T> func, T arg, int milliseconds) {
-
-        func.accept(arg);
+    private <T> void callIntervalTask(long id, Consumer<T> func, T arg, int milliseconds) {
+        if(intervalMap.get(id) == false) {
+            return;
+        }
         setTimeout( (args)-> {
-            call(func, arg, milliseconds);
+            func.accept(arg);
+            callIntervalTask(id, func, arg, milliseconds);
         }, null, milliseconds);
     }
 
@@ -167,9 +179,12 @@ public class Timer {
                 })
         ).then((ival)->{
             System.out.println(ival);
-            timer.setInterval((val)->{
+            long iid = timer.setInterval((val)->{
                 System.out.println(val+1);
             }, 10, 1000);
+            timer.setTimeout((val)-> {
+                timer.clearInterval(iid);
+            }, 10, 2900);
             return null;
         });
         long id = timer.setTimeout((val)-> {
