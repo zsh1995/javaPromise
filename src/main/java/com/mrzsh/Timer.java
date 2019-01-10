@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
@@ -26,6 +28,10 @@ public class Timer {
     private Map<Long, DelayedTask<?>> timingMap = Collections.synchronizedMap(new HashMap<>());
 
     private Map<Long, Boolean> intervalMap = Collections.synchronizedMap(new HashMap<>());
+
+    private ReentrantLock lock = new ReentrantLock();
+
+    private Condition condition = lock.newCondition();
 
 
     int threadNum;
@@ -87,12 +93,26 @@ public class Timer {
         }
     }
 
-    boolean runFlag = true;
+    public void waitShutdown() throws InterruptedException {
+        try {
+            lock.lock();
+            pool.shutdown();
+            condition.await();
+            shutdownGraceful();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    volatile boolean runFlag = true;
     public void start() {
         System.out.println("start the service");
         pool.submit(() -> {
            while(runFlag && !Thread.interrupted()) {
                try {
+                   if (delayTasks.size() == 0 && pool.isShutdown()) {
+                       break;
+                   }
                    DelayedTask<?> task = delayTasks.poll(10, TimeUnit.MILLISECONDS);
                    if(task != null) {
                        if( threadNum == 1) {
@@ -108,6 +128,13 @@ public class Timer {
                    e.printStackTrace();
                }
            }
+           // notify other thread to continue
+            try {
+                lock.lock();
+                condition.signalAll();
+            } finally {
+                lock.unlock();
+            }
         });
     }
 
@@ -162,6 +189,14 @@ public class Timer {
         }, null, milliseconds);
     }
 
+    public <T> Promise<T> asycTimeout(T val, int ms) {
+        return  new Promise<T>((resolv, reject)->{
+            setTimeout((v)->{
+                resolv.accept(v);
+            }, val, ms);
+        });
+    }
+
     public static void main(String[] args) {
         Timer timer = singleThreadTimer();
         System.out.println(1);
@@ -192,6 +227,15 @@ public class Timer {
         }, 1000, 10000);
         timer.clearTimeout(id);
         //timer.shutdownGraceful();
+//        timer.<Integer>asycTimeout(10, 3000)
+//                .then((val)->{
+//                    System.out.println(val);
+//                    return timer.asycTimeout(100,3000);
+//                })
+//                .then((val)->{
+//                    System.out.println(val);
+//                    return null;
+//                });
     }
 
 }

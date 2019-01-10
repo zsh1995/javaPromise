@@ -1,5 +1,7 @@
 package com.mrzsh;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -29,16 +31,37 @@ public class Promise <T> {
 
     private T pval;
 
-    public Throwable cause() {
+    private Throwable cause() {
         return reason;
     }
 
     private void finished(T val) {
+        if(!isPending()) return;
         pval = val;
-        status = Status.fulfilled;
+        fulfilled();
         if(handler != null) {
             handler.accept(pval);
         }
+    }
+
+    private void fulfilled() {
+        this.status = Status.fulfilled;
+    }
+
+    private void rejected() {
+        this.status = Status.rejected;
+    }
+
+    private boolean isPending(){
+        return this.status == Status.pending;
+    }
+
+    private boolean isFulfilled() {
+        return this.status == Status.fulfilled;
+    }
+
+    private boolean isRejected() {
+        return this.status == Status.rejected;
     }
 
     private Consumer<Throwable> exceptionHandler;
@@ -71,6 +94,48 @@ public class Promise <T> {
     private static <T> Promise<T> pending() {
         return new Promise<>();
     }
+
+    private static class SimpleCountDown{
+        int remain;
+        int settingVal;
+        SimpleCountDown(int init) {
+            settingVal = init;
+            remain = init;
+        }
+        boolean countDown() {
+            remain--;
+            return remain <= 0;
+        }
+    }
+    public static <T> Promise<List<T>> all(List<Promise<T>> args){
+        Promise<List<T>> p = new Promise<>((resolv, reject)->{
+            List<T> result = new ArrayList<>();
+            SimpleCountDown latch = new SimpleCountDown(args.size());
+            for(Promise<T> arg : args) {
+                arg.then((val)->{
+                    result.add(val);
+                    if(latch.countDown()) {
+                        resolv.accept(result);
+                    }
+                    return null;
+                });
+            }
+        });
+        return p;
+    }
+
+    public static <T> Promise<T> race(List<Promise<T>> args){
+        Promise<T> p = new Promise<T>((resolv, reject)->{
+            for(Promise<T> arg : args) {
+                arg.then((val)->{
+                    resolv.accept(val);
+                    return null;
+                });
+            }
+        });
+        return p;
+    }
+
     private Consumer<T> handler;
     private void setHanlder(Consumer<T> handler) {
         if(this.handler == null && this.status == Status.pending)
