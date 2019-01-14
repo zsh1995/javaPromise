@@ -46,7 +46,7 @@ new Promise<Integer>((resolv, reject)-> {
 - `Promise<T> asycTimeout(val, timeDealy)`<br>
 返回一个`Promise`，将在`timeDealy`毫秒后转为`fulfilled`状态，并传递 `val`。
 - `waitShutdown()`<br>
-关闭线程池，等待线程池中所有任务完成。
+关闭`Timer`，等待`Timer`中所有任务完成。
 
 ## 更新历史
  

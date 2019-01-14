@@ -2,10 +2,7 @@ package com.mrzsh;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.*;
 
 /**
  * @program: javapromise
@@ -27,7 +24,6 @@ public class Promise <T> {
     private BiConsumer<Consumer<T>, Consumer<Throwable>> executor;
 
     private Throwable reason;
-
 
     private T pval;
 
@@ -117,7 +113,6 @@ public class Promise <T> {
                     if(latch.countDown()) {
                         resolv.accept(result);
                     }
-                    return null;
                 });
             }
         });
@@ -129,7 +124,6 @@ public class Promise <T> {
             for(Promise<T> arg : args) {
                 arg.then((val)->{
                     resolv.accept(val);
-                    return null;
                 });
             }
         });
@@ -154,55 +148,95 @@ public class Promise <T> {
     }
 
     public <R> Promise<R> then(AsycTask<T, R> onFulfilled) {
+        return then(onFulfilled, null);
+    }
+
+    public <R> Promise<R> then(AsycTask<T, R> onFulfilled , AsycTask<Throwable, R> onReject) {
         // outter promise
         Promise<R> result = Promise.pending();
         setHanlder((val) -> {
-            if(status == Status.fulfilled) {
-                Promise<R> res;
-                try {
-                    res = onFulfilled.asycdo(pval);
-                } catch (Throwable e) {
-                    result.fail(e);
-                    return;
-                }
-                if(res == null) {
-                    res = Promise.<R>resolve(null);
-                }
-                // make the inner promise linked with outter promise
-                res.setHanlder(result.resolve);
-                res.setExceptionHandler(result.reject);
-            } else {
-                // todo 异常处理
-                result.fail(this.cause());
-            }
+            compose(Promise::isFulfilled, result, createAsycTaskConsumer(onFulfilled, val));
         });
+        if(onReject != null) {
+            setExceptionHandler((erro)->{
+                compose(Promise::isRejected, result, createAsycTaskConsumer(onReject, erro));
+            });
+        }
         return result;
+    }
+
+    /**
+     * accept a asycconsumer(no return value)
+     * @param onFulfilled
+     * @param <R>
+     * @return
+     */
+    public <R> Promise<R> then(AsycConsumer<T> onFulfilled) {
+        return then(adpatToAsyc(onFulfilled));
+    }
+
+    public <R> Promise<R> then(Function<T, R> onFulfilled) {
+        return then(adaptFunc(onFulfilled));
+    }
+
+    private <R> void compose(Predicate<Promise<T>> condition,
+                                   Promise<R> result,
+                                   Consumer<Promise<R>> consumer) {
+        if(condition.test(this)) {
+            consumer.accept(result);
+        } else {
+            result.fail(this.cause());
+        }
+    }
+
+    private <T, R> Consumer<Promise<R>> createAsycTaskConsumer(AsycTask<T, R> event, T val){
+        return (Promise<R> result)->{
+            Promise<R> res;
+            try {
+                res = event.asycdo(val);
+            } catch (Throwable e) {
+                result.fail(e);
+                return;
+            }
+            if(res == null) {
+                res = Promise.<R>resolve(null);
+            }
+            // make the inner promise linked with outter promise
+            res.setHanlder(result.resolve);
+            res.setExceptionHandler(result.reject);
+        };
+    }
+
+    private <T, R> AsycTask<T, R> adpatToAsyc(AsycConsumer<T> src) {
+        return (T val) -> {
+            src.consume(val);
+            return null;
+        };
+    }
+
+    private <T, R> AsycTask<T, R> adpatToAsyc(Function<T, R> src) {
+        return (T val) -> Promise.resolve(src.apply(val));
+    }
+
+
+    private <T, R> AsycTask<T, R> adaptFunc(Function<T, R> src) {
+        return (T val) -> Promise.resolve(src.apply(val));
     }
 
     public <R> Promise<R> acatch(AsycTask<Throwable, R> onFail) {
         // todo 异常处理
         Promise<R> result = Promise.pending();
         setExceptionHandler((throwable)-> {
-            if(status == Status.rejected) {
-                Promise<R> res;
-                try {
-                    res = onFail.asycdo(throwable);
-                } catch (Throwable e) {
-                    result.fail(e);
-                    return;
-                }
-                if(res == null) {
-                    res = Promise.<R>resolve(null);
-                }
-                // make the inner promise linked with outter promise
-                res.setHanlder(result.resolve);
-                res.setExceptionHandler(result.reject);
-            } else {
-                // todo 异常处理
-                result.fail(this.cause());
-            }
+            compose(Promise::isRejected, result, createAsycTaskConsumer(onFail, throwable));
         });
         return result;
+    }
+
+    public <R> Promise<R> acatch(AsycConsumer<Throwable> onFail) {
+        return acatch(adpatToAsyc(onFail));
+    }
+    public <R> Promise<R> acatch(Function<Throwable, R> onFail) {
+        return acatch(adpatToAsyc(onFail));
     }
 
     public static void main(String[] args) {
@@ -222,17 +256,14 @@ public class Promise <T> {
         Promise<?> p1 = new Promise<>((res, rej) -> {
            System.out.println(1);
            res.accept(1);
-        }).then((val)-> {
+        }).then((AsycConsumer<Object>) (val)-> {
             System.out.println("phase 2 , val = " + val);
-
             throw new Exception("i am erro");
         }).acatch((throwable)->{
             System.out.println(throwable.getMessage());
-            return null;
         }).then((val)->{
             if(val == null)
                 System.out.println("is null");
-            return null;
         });
 
     }

@@ -36,7 +36,7 @@ public class Timer {
 
     int threadNum;
 
-    static class DelayedTask<T> implements Delayed {
+    private static class DelayedTask<T> implements Delayed {
         private Consumer<T> delayedConsumer;
 
         private T arg;
@@ -84,7 +84,7 @@ public class Timer {
         return new Timer(1);
     }
 
-    public void shutdownGraceful() {
+    public void shutdownNow() {
         try {
             runFlag = false;
             boolean flag = pool.awaitTermination(10000, TimeUnit.MILLISECONDS);
@@ -98,14 +98,14 @@ public class Timer {
             lock.lock();
             pool.shutdown();
             condition.await();
-            shutdownGraceful();
+            shutdownNow();
         } finally {
             lock.unlock();
         }
     }
 
     volatile boolean runFlag = true;
-    public void start() {
+    private void start() {
         System.out.println("start the service");
         pool.submit(() -> {
            while(runFlag && !Thread.interrupted()) {
@@ -196,6 +196,11 @@ public class Timer {
             }, val, ms);
         });
     }
+    public <T> Promise<T> asycInterval(T val, int ms) {
+        return new Promise<>((resolv, reject)->{
+            // todo timer task
+        });
+    }
 
     public static void main(String[] args) {
         Timer timer = singleThreadTimer();
@@ -205,13 +210,14 @@ public class Timer {
                 System.out.println(val);
                 res.accept(100);
             }, 10, 1000);
-        }).then((val) ->
-                new Promise<Integer>((res, reject)-> {
-                    timer.setTimeout((ival) -> {
-                        System.out.println(ival);
-                        res.accept(101);
-                    }, val, 1000);
-                })
+        }).then((AsycTask<Integer, Integer>) (val) -> {
+                    return new Promise<Integer>((res, reject) -> {
+                        timer.setTimeout((ival) -> {
+                            System.out.println(ival);
+                            res.accept(101);
+                        }, val, 1000);
+                    });
+                }
         ).then((ival)->{
             System.out.println(ival);
             long iid = timer.setInterval((val)->{
@@ -220,13 +226,12 @@ public class Timer {
             timer.setTimeout((val)-> {
                 timer.clearInterval(iid);
             }, 10, 2900);
-            return null;
         });
         long id = timer.setTimeout((val)-> {
             System.out.println(100000);
         }, 1000, 10000);
         timer.clearTimeout(id);
-        //timer.shutdownGraceful();
+        //timer.shutdownNow();
 //        timer.<Integer>asycTimeout(10, 3000)
 //                .then((val)->{
 //                    System.out.println(val);
