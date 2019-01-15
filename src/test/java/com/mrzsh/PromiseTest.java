@@ -5,12 +5,9 @@ import org.junit.Test;
 
 import java.text.MessageFormat;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import static org.junit.Assert.*;
-import java.text.MessageFormat;
 
 public class PromiseTest {
 
@@ -38,22 +35,22 @@ public class PromiseTest {
                 timer.asycTimeout(4,4000)
         ))
                 .then((val)->{
-                    start.subed(System.currentTimeMillis());
+                    start.subBy(System.currentTimeMillis());
                     assertTrue(val.equals(Arrays.asList(1,2,3,4)));
                 });
         timer.waitShutdown();
         assertLongIn(start.get() , 4000L, 4010L);
     }
 
-    private static void assertLongIn(long acutal, long... intervals) {
+    private static void assertLongIn(long actual, long... intervals) {
         if(intervals.length == 0) fail("no interval");
         if(intervals.length >= 1) {
-            if(acutal < intervals[0]) fail(MessageFormat.format("{0} is smaller then interval left {1}",
-                    acutal, intervals[0]));
+            if(actual < intervals[0]) fail(MessageFormat.format("{0} is smaller then interval left {1}",
+                    actual, intervals[0]));
         }
         if(intervals.length >= 2) {
-            if(acutal > intervals[1]) fail(MessageFormat.format("{0} is larger then interval right {1}",
-                    acutal, intervals[1]));
+            if(actual > intervals[1]) fail(MessageFormat.format("{0} is larger then interval right {1}",
+                    actual, intervals[1]));
         }
     }
 
@@ -69,7 +66,7 @@ public class PromiseTest {
         ))
         .then((val)->{
             value.set(val);
-            start.subed(System.currentTimeMillis());
+            start.subBy(System.currentTimeMillis());
         });
         timer.waitShutdown();
         assertEquals(1L, value.get());
@@ -87,7 +84,7 @@ public class PromiseTest {
                 })
                 .then((val)->{
                     holders[1] = val;
-                    start.subed(System.currentTimeMillis());
+                    start.subBy(System.currentTimeMillis());
                 });
         timer.waitShutdown();
         assertArrayEquals(holders, new int[] {1,2});

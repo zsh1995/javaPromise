@@ -131,7 +131,7 @@ public class Promise <T> {
     }
 
     private Consumer<T> handler;
-    private void setHanlder(Consumer<T> handler) {
+    private void setHandler(Consumer<T> handler) {
         if(this.handler == null && this.status == Status.pending)
             this.handler = handler;
         else if(this.status == Status.fulfilled){
@@ -152,14 +152,14 @@ public class Promise <T> {
     }
 
     public <R> Promise<R> then(AsycTask<T, R> onFulfilled , AsycTask<Throwable, R> onReject) {
-        // outter promise
+        // outer promise
         Promise<R> result = Promise.pending();
-        setHanlder((val) -> {
+        setHandler((val) -> {
             compose(Promise::isFulfilled, result, createAsycTaskConsumer(onFulfilled, val));
         });
         if(onReject != null) {
-            setExceptionHandler((erro)->{
-                compose(Promise::isRejected, result, createAsycTaskConsumer(onReject, erro));
+            setExceptionHandler((error)->{
+                compose(Promise::isRejected, result, createAsycTaskConsumer(onReject, error));
             });
         }
         return result;
@@ -193,7 +193,7 @@ public class Promise <T> {
         return (Promise<R> result)->{
             Promise<R> res;
             try {
-                res = event.asycdo(val);
+                res = event.asycAccept(val);
             } catch (Throwable e) {
                 result.fail(e);
                 return;
@@ -202,7 +202,7 @@ public class Promise <T> {
                 res = Promise.<R>resolve(null);
             }
             // make the inner promise linked with outter promise
-            res.setHanlder(result.resolve);
+            res.setHandler(result.resolve);
             res.setExceptionHandler(result.reject);
         };
     }
@@ -258,7 +258,7 @@ public class Promise <T> {
            res.accept(1);
         }).then((AsycConsumer<Object>) (val)-> {
             System.out.println("phase 2 , val = " + val);
-            throw new Exception("i am erro");
+            throw new Exception("i am error");
         }).acatch((throwable)->{
             System.out.println(throwable.getMessage());
         }).then((val)->{

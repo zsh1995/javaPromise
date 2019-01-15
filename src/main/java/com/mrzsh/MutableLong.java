@@ -36,7 +36,7 @@ public class MutableLong extends Number
         return this;
     }
 
-    public MutableLong subed(long toSuber){
+    public MutableLong subBy(long toSuber){
         val = toSuber - val;
         return this;
     }
