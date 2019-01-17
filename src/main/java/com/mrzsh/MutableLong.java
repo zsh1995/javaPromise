@@ -36,6 +36,11 @@ public class MutableLong extends Number
         return this;
     }
 
+    public MutableLong div(long diver) {
+        val = val / diver;
+        return this;
+    }
+
     public MutableLong subBy(long toSuber){
         val = toSuber - val;
         return this;

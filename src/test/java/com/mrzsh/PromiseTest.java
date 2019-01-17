@@ -7,6 +7,7 @@ import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.function.Function;
 
+import static com.mrzsh.AssertHelper.assertLongIn;
 import static org.junit.Assert.*;
 
 public class PromiseTest {
@@ -42,17 +43,7 @@ public class PromiseTest {
         assertLongIn(start.get() , 4000L, 4010L);
     }
 
-    private static void assertLongIn(long actual, long... intervals) {
-        if(intervals.length == 0) fail("no interval");
-        if(intervals.length >= 1) {
-            if(actual < intervals[0]) fail(MessageFormat.format("{0} is smaller then interval left {1}",
-                    actual, intervals[0]));
-        }
-        if(intervals.length >= 2) {
-            if(actual > intervals[1]) fail(MessageFormat.format("{0} is larger then interval right {1}",
-                    actual, intervals[1]));
-        }
-    }
+
 
     @Test
     public void race() throws InterruptedException {
@@ -96,7 +87,7 @@ public class PromiseTest {
         String[] holder = new String[1];
         timer.asycTimeout(1, 1000)
                 .then((AsycConsumer<Integer>)(val)->{
-                    throw new Exception("erro");
+                    throw new RuntimeException("erro");
                 })
                 .acatch((erro)->{
                     holder[0] = erro.getMessage();
@@ -120,6 +111,5 @@ public class PromiseTest {
                 });
         timer.waitShutdown();
         assertEquals(test.get(), 1);
-
     }
 }

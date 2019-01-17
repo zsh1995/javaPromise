@@ -92,13 +92,11 @@ public class Promise <T> {
     }
 
     private static class SimpleCountDown{
-        int remain;
-        int settingVal;
+        volatile int remain;
         SimpleCountDown(int init) {
-            settingVal = init;
             remain = init;
         }
-        boolean countDown() {
+        synchronized boolean countDown() {
             remain--;
             return remain <= 0;
         }
@@ -113,6 +111,8 @@ public class Promise <T> {
                     if(latch.countDown()) {
                         resolv.accept(result);
                     }
+                }, (erro) -> {
+                    reject.accept(erro);
                 });
             }
         });
@@ -121,9 +121,16 @@ public class Promise <T> {
 
     public static <T> Promise<T> race(List<Promise<T>> args){
         Promise<T> p = new Promise<T>((resolv, reject)->{
+            SimpleCountDown latch = new SimpleCountDown(args.size());
+            Throwable[] holder = new Throwable[1];
             for(Promise<T> arg : args) {
                 arg.then((val)->{
                     resolv.accept(val);
+                }, (erro) -> {
+                    holder[0] = new Throwable(holder[0]);
+                    if(latch.countDown()) {
+                        reject.accept(holder[0]);
+                    }
                 });
             }
         });
@@ -172,7 +179,11 @@ public class Promise <T> {
      * @return
      */
     public <R> Promise<R> then(AsycConsumer<T> onFulfilled) {
-        return then(adpatToAsyc(onFulfilled));
+        return then(adpatToAsycTask(onFulfilled));
+    }
+
+    public <R> Promise<R> then(AsycConsumer<T> onFulfilled, AsycConsumer<Throwable> onReject){
+        return then(adpatToAsycTask(onFulfilled), adpatToAsycTask(onReject));
     }
 
     public <R> Promise<R> then(Function<T, R> onFulfilled) {
@@ -207,14 +218,14 @@ public class Promise <T> {
         };
     }
 
-    private <T, R> AsycTask<T, R> adpatToAsyc(AsycConsumer<T> src) {
+    private <T, R> AsycTask<T, R> adpatToAsycTask(AsycConsumer<T> src) {
         return (T val) -> {
             src.consume(val);
             return null;
         };
     }
 
-    private <T, R> AsycTask<T, R> adpatToAsyc(Function<T, R> src) {
+    private <T, R> AsycTask<T, R> adpatToAsycTask(Function<T, R> src) {
         return (T val) -> Promise.resolve(src.apply(val));
     }
 
@@ -224,7 +235,6 @@ public class Promise <T> {
     }
 
     public <R> Promise<R> acatch(AsycTask<Throwable, R> onFail) {
-        // todo 异常处理
         Promise<R> result = Promise.pending();
         setExceptionHandler((throwable)-> {
             compose(Promise::isRejected, result, createAsycTaskConsumer(onFail, throwable));
@@ -233,10 +243,10 @@ public class Promise <T> {
     }
 
     public <R> Promise<R> acatch(AsycConsumer<Throwable> onFail) {
-        return acatch(adpatToAsyc(onFail));
+        return acatch(adpatToAsycTask(onFail));
     }
     public <R> Promise<R> acatch(Function<Throwable, R> onFail) {
-        return acatch(adpatToAsyc(onFail));
+        return acatch(adpatToAsycTask(onFail));
     }
 
     public static void main(String[] args) {
@@ -258,7 +268,7 @@ public class Promise <T> {
            res.accept(1);
         }).then((AsycConsumer<Object>) (val)-> {
             System.out.println("phase 2 , val = " + val);
-            throw new Exception("i am error");
+            throw new RuntimeException("i am error");
         }).acatch((throwable)->{
             System.out.println(throwable.getMessage());
         }).then((val)->{

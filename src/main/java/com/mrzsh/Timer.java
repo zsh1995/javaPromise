@@ -1,13 +1,12 @@
 package com.mrzsh;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * @program: javapromise
@@ -25,13 +24,15 @@ public class Timer {
 
     private AtomicLong intervalId = new AtomicLong(1000);
 
-    private Map<Long, DelayedTask<?>> timingMap = Collections.synchronizedMap(new HashMap<>());
+    private Map<Long, DelayedTask<?>> timingMap = new ConcurrentHashMap<>();
 
-    private Map<Long, Boolean> intervalMap = Collections.synchronizedMap(new HashMap<>());
+    private Map<Long, Boolean> intervalMap = new ConcurrentHashMap<>();
 
     private ReentrantLock lock = new ReentrantLock();
 
     private Condition condition = lock.newCondition();
+
+    private Condition startCondition = lock.newCondition();
 
 
     int threadNum;
@@ -80,8 +81,14 @@ public class Timer {
         }
     }
 
+    //used for pure asychroniszed tasks
     public static Timer singleThreadTimer() {
         return new Timer(1);
+    }
+
+    // used for blocking tasks
+    public static Timer poolTimer() {
+        return new Timer(10);
     }
 
     public void shutdownNow() {
@@ -104,10 +111,25 @@ public class Timer {
         }
     }
 
+    public boolean waitStart() throws InterruptedException {
+        try{
+            lock.lock();
+            return startCondition.await(1000, TimeUnit.MILLISECONDS);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     volatile boolean runFlag = true;
     private void start() {
         System.out.println("start the service");
         pool.submit(() -> {
+            try{
+                lock.lock();
+                startCondition.signalAll();
+            } finally {
+                lock.unlock();
+            }
            while(runFlag && !Thread.interrupted()) {
                try {
                    if (delayTasks.size() == 0 && pool.isShutdown()) {
@@ -179,27 +201,41 @@ public class Timer {
         return false;
     }
 
-    private <T> void callIntervalTask(long id, Consumer<T> func, T arg, int milliseconds) {
-        if(intervalMap.get(id) == false) {
+    private <T> void callIntervalTask(long id, Consumer<T> consumer, T arg, int milliseconds) {
+        Function<T, T> func = (val) -> {
+            consumer.accept(val);
+            return null;
+        };
+        callIntervalTask(id, func, arg, milliseconds);
+    }
+
+    private <T> void callIntervalTask(long id, Function<T, T> func, T arg, int milliseconds) {
+        if(intervalMap.get(id) == false){
+            intervalMap.remove(id);
             return;
         }
-        setTimeout( (args)-> {
-            func.accept(arg);
+        // when the thread pool is shutdown , we should stop add new delay tasks.
+        if(pool.isShutdown()) {
+            intervalMap.clear();
+            return;
+        }
+        setTimeout( args-> {
+            T val = func.apply(arg);
             callIntervalTask(id, func, arg, milliseconds);
         }, null, milliseconds);
     }
 
     public <T> Promise<T> asycTimeout(T val, int ms) {
-        return  new Promise<T>((resolv, reject)->{
-            setTimeout((v)->{
+
+        return new Promise<T>((resolv, reject)->{
+             setTimeout((v)->{
                 resolv.accept(v);
             }, val, ms);
         });
     }
     public <T> Promise<T> asycInterval(T val, int ms) {
-        return new Promise<>((resolv, reject)->{
-            // todo timer task
-        });
+        // todo : 实现异步控制定时任务
+        throw new UnsupportedOperationException("this method is still not impl");
     }
 
     public static void main(String[] args) {
