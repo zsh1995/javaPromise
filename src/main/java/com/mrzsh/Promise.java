@@ -96,9 +96,9 @@ public class Promise <T> {
         SimpleCountDown(int init) {
             remain = init;
         }
-        synchronized boolean countDown() {
+        synchronized void countDownThen(Runnable then) {
             remain--;
-            return remain <= 0;
+            if(remain <= 0) then.run();
         }
     }
     public static <T> Promise<List<T>> all(List<Promise<T>> args){
@@ -108,9 +108,7 @@ public class Promise <T> {
             for(Promise<T> arg : args) {
                 arg.then((val)->{
                     result.add(val);
-                    if(latch.countDown()) {
-                        resolv.accept(result);
-                    }
+                    latch.countDownThen(()-> resolv.accept(result));
                 }, (erro) -> {
                     reject.accept(erro);
                 });
@@ -128,9 +126,7 @@ public class Promise <T> {
                     resolv.accept(val);
                 }, (erro) -> {
                     holder[0] = new Throwable(holder[0]);
-                    if(latch.countDown()) {
-                        reject.accept(holder[0]);
-                    }
+                    latch.countDownThen(()-> reject.accept(erro));
                 });
             }
         });
